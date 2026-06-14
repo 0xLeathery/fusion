@@ -1,3 +1,9 @@
 __pycache__/
 *.pyc
 results.jsonl
+
+# Generated code datasets (large / redistribution). The tiny committed fixtures
+# sample.jsonl and code_sample.jsonl are kept; published run snapshots
+# (baseline-*.jsonl) are committed deliberately and not ignored.
+eval/quality/datasets/humaneval*.jsonl
+eval/quality/datasets/mbpp*.jsonl

@@ -36,3 +36,16 @@ jobs:
             --dataset eval/quality/datasets/sample.jsonl \
             --conditions single,selfconsist:3,selfconsist:4,fusion:3 \
             --repeats 2 --dry-run --out /tmp/fusion_eval.jsonl
+
+      # Exercises the executable code grader on a tiny self-authored fixture
+      # (canonical solutions pass, stubs fail). --dry-run = no API; the grader
+      # still really runs the code in a subprocess, so this guards that path.
+      - name: Code-grader smoke (dry-run, no API)
+        run: |
+          python3 eval/quality/run_quality_eval.py \
+            --dataset eval/quality/datasets/code_sample.jsonl \
+            --conditions single,selfconsist:3,fusion:3 \
+            --repeats 2 --dry-run --out /tmp/code_eval.jsonl
+
+      - name: HumanEval builder selftest (no network)
+        run: python3 eval/quality/datasets/build_humaneval.py --selftest
