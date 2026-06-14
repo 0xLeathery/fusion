@@ -1,0 +1,36 @@
+{"id": "h01", "label": "hard", "prompt": "Compare optimistic and pessimistic locking for our payments table and recommend one."}
+{"id": "h02", "label": "hard", "prompt": "Design a rate limiter that survives a multi-region active-active deployment."}
+{"id": "h03", "label": "hard", "prompt": "What is the root cause of the intermittent p99 latency spike under load?"}
+{"id": "h04", "label": "hard", "prompt": "Evaluate whether we should migrate from REST to gRPC for our internal services."}
+{"id": "h05", "label": "hard", "prompt": "Analyse the trade-off between read replicas and a caching layer for this workload."}
+{"id": "h06", "label": "hard", "prompt": "Prove that this scheduling algorithm is starvation-free, or give a counterexample."}
+{"id": "h07", "label": "hard", "prompt": "Why does our Kubernetes pod get OOMKilled only during the nightly batch job?"}
+{"id": "h08", "label": "hard", "prompt": "What architecture would you pick for a write-heavy time-series ingestion pipeline at 1M events/sec?"}
+{"id": "h09", "label": "hard", "prompt": "We have a memory leak in production. Walk through how you would isolate it, what tools you'd use, which heap-growth signatures point to which causes, and how you'd confirm the fix without a full redeploy of every service in the mesh."}
+{"id": "h10", "label": "hard", "prompt": "Compare three consensus protocols for our use case and justify the pick on partition behaviour."}
+{"id": "h11", "label": "hard", "prompt": "Design and evaluate a migration plan to move 40TB off the monolith DB with zero downtime."}
+{"id": "h12", "label": "hard", "prompt": "Why is the model overfitting? Should we change regularisation, data, or architecture?"}
+{"id": "h13", "label": "hard", "prompt": "Walk me through the security implications of allowing user-supplied templates here, the threat model we should assume, the sandboxing options and their escape histories, and which one you'd deploy given we can't add new infrastructure this quarter."}
+{"id": "h14", "label": "hard", "prompt": "Evaluate Postgres vs DynamoDB for a multi-tenant SaaS with unpredictable per-tenant load."}
+{"id": "h15", "label": "hard", "prompt": "Trade-off analysis: should retries live in the client SDK, the gateway, or the service mesh?"}
+{"id": "h16", "label": "hard", "prompt": "Our deploy is flaky. Diagnose the most likely systemic cause and design a fix that prevents recurrence rather than papering over this instance, then tell me how we'd know it worked."}
+{"id": "h17", "label": "hard", "prompt": "Compare eventual and strong consistency for the inventory service and recommend with reasoning."}
+{"id": "h18", "label": "hard", "prompt": "Design an A/B testing framework that correctly handles network effects between users."}
+{"id": "e01", "label": "easy", "prompt": "What's the capital of France?"}
+{"id": "e02", "label": "easy", "prompt": "Reformat this JSON to be pretty-printed."}
+{"id": "e03", "label": "easy", "prompt": "Rename the variable foo to userId in this file."}
+{"id": "e04", "label": "easy", "prompt": "Add a newline at the end of the file."}
+{"id": "e05", "label": "easy", "prompt": "What does the chmod +x command do?"}
+{"id": "e06", "label": "easy", "prompt": "Convert this list to uppercase."}
+{"id": "e07", "label": "easy", "prompt": "Bump the version in package.json to 1.2.0."}
+{"id": "e08", "label": "easy", "prompt": "Run the tests."}
+{"id": "e09", "label": "easy", "prompt": "What's 2 plus 2?"}
+{"id": "e10", "label": "easy", "prompt": "Show me the git status."}
+{"id": "e11", "label": "easy", "prompt": "Compare these two strings for equality in Python."}
+{"id": "e12", "label": "easy", "prompt": "Fix the typo in this comment."}
+{"id": "e13", "label": "easy", "prompt": "Install the requests library."}
+{"id": "e14", "label": "easy", "prompt": "What's the syntax for a Python list comprehension?"}
+{"id": "e15", "label": "easy", "prompt": "List the files in this directory."}
+{"id": "e16", "label": "easy", "prompt": "Add a .gitignore entry for node_modules."}
+{"id": "e17", "label": "easy", "prompt": "Print hello world in Go."}
+{"id": "e18", "label": "easy", "prompt": "What port does HTTPS use by default?"}

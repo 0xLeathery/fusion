@@ -103,6 +103,23 @@ export FUSION_MODE=always     # nudge on everything
 - **Mode.** Keep `selective` (or `off`) for routine work; `always` will chew through
   your weekly ceiling fast.
 
+## Benchmarking
+
+Don't take the quality claim on faith — `eval/` benchmarks it. The key idea: the
+honest baseline isn't single-pass, it's **equal-budget self-consistency** (spend the
+same (N+1)× tokens drawing more samples of the same model and voting). Fusion has to
+beat *that* to justify itself.
+
+- `eval/router/` — scores the routing heuristic (precision/recall/F1) against a
+  labelled prompt set. Deterministic, no API, runnable now:
+  `python3 eval/router/run_router_eval.py`
+- `eval/quality/` — drives headless runs across `single` / `selfconsist:N` /
+  `fusion:N`, grades objectively, and reports accuracy CIs, McNemar significance, and
+  token ratios. Start with `--dry-run` to exercise the pipeline without spending
+  budget.
+
+See `eval/README.md` for the full methodology, ablations, and caveats.
+
 ## Limits
 
 - **Token burn.** ≈ (N+1)× tokens per fused query. Plan around your weekly
