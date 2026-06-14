@@ -1,0 +1,10 @@
+{"id": "n1", "type": "numeric", "task": "Compute 144 divided by 12. Reply with just the number.", "answer": 12}
+{"id": "n2", "type": "numeric", "task": "What is 13 squared? Reply with just the number.", "answer": 169}
+{"id": "n3", "type": "numeric", "task": "How many minutes are in 3 hours? Reply with just the number.", "answer": 180}
+{"id": "n4", "type": "numeric", "task": "What is the sum of the first 10 positive integers? Reply with just the number.", "answer": 55}
+{"id": "n5", "type": "numeric", "task": "What is 17 multiplied by 23? Reply with just the number.", "answer": 391}
+{"id": "m1", "type": "mcq", "task": "Which planet is the largest in the Solar System? A) Earth B) Jupiter C) Mars D) Venus", "answer": "B"}
+{"id": "m2", "type": "mcq", "task": "What is the chemical symbol for sodium? A) S B) So C) Na D) Sn", "answer": "C"}
+{"id": "m3", "type": "mcq", "task": "Which data structure is FIFO? A) Stack B) Queue C) Tree D) Heap", "answer": "B"}
+{"id": "m4", "type": "mcq", "task": "What is the worst-case time complexity of binary search? A) O(n) B) O(log n) C) O(n log n) D) O(1)", "answer": "B"}
+{"id": "m5", "type": "mcq", "task": "Which HTTP status code means Not Found? A) 200 B) 301 C) 404 D) 500", "answer": "C"}

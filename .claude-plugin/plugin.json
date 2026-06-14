@@ -1,0 +1,8 @@
+{
+  "name": "model-fusion",
+  "version": "0.1.0",
+  "description": "Self-fusion (Mixture-of-Agents) over native persona subagents: fan a hard task out to a parallel panel on one base model, then synthesise.",
+  "author": {
+    "name": "Ethan Hurst"
+  }
+}
