@@ -1,0 +1,38 @@
+name: eval
+
+# Published baseline gate. The router benchmark is deterministic (fixed labels +
+# a no-model-call heuristic), so its F1 is the same on every run and makes a real
+# regression gate. The quality harness can't run in CI (it needs real model calls
+# and a permission-bypassed headless agent), so here it runs only as a --dry-run
+# pipeline smoke test. See eval/BASELINE.md for the published numbers and the
+# human-run procedure for the quality baseline.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Tier 1 — the deterministic, published baseline. Floor is set below the
+      # current F1 (0.914) so legitimate label-set growth doesn't flake the gate,
+      # while a real routing regression still fails the build.
+      - name: Router baseline (deterministic F1 gate)
+        run: python3 eval/router/run_router_eval.py --min-f1 0.90
+
+      # Harness plumbing smoke — proves grading/stats/cost code still runs.
+      # --dry-run simulates answers + token counts, so this spends nothing and
+      # makes no assertion on the (randomised) numbers; it only must exit 0.
+      - name: Quality harness smoke (dry-run, no API)
+        run: |
+          python3 eval/quality/run_quality_eval.py \
+            --dataset eval/quality/datasets/sample.jsonl \
+            --conditions single,selfconsist:3,selfconsist:4,fusion:3 \
+            --repeats 2 --dry-run --out /tmp/fusion_eval.jsonl

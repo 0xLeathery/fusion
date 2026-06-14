@@ -28,6 +28,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import metrics  # noqa: E402
 
+# Repo root == the plugin dir (it holds .claude-plugin/). Forward it to every
+# headless `claude -p` so `fusion:N` can load /fuse without a separate install.
+# Derived from __file__ so the harness stays portable across checkouts.
+PLUGIN_DIR = str(Path(__file__).resolve().parents[2])
+
 
 # ---- grading ---------------------------------------------------------------
 
@@ -84,7 +89,8 @@ def invoke_claude(prompt, model, fusion_mode, dry_run, sim):
         return f"The answer is {ans}.", tokens, None
 
     env = dict(os.environ, FUSION_MODE=fusion_mode)
-    cmd = ["claude", "-p", prompt, "--output-format", "json"]
+    cmd = ["claude", "-p", prompt, "--output-format", "json",
+           "--plugin-dir", PLUGIN_DIR]
     if model:
         cmd += ["--model", model]
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env)

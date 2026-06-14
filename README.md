@@ -1,5 +1,7 @@
 # model-fusion
 
+[![eval](https://github.com/0xLeathery/fusion/actions/workflows/eval.yml/badge.svg)](https://github.com/0xLeathery/fusion/actions/workflows/eval.yml)
+
 A Claude Code **plugin** that implements **self-fusion (Mixture-of-Agents)** using
 native subagents, so it runs against your **subscription** instead of per-token API
 billing.
@@ -119,6 +121,19 @@ beat *that* to justify itself.
   budget.
 
 See `eval/README.md` for the full methodology, ablations, and caveats.
+
+### Published baseline
+
+The baseline is published in two tiers — see **`eval/BASELINE.md`**:
+
+- **Router (deterministic, gated).** Frozen numbers (currently **F1 0.914**, n=36) with
+  a CI gate (`--min-f1 0.90`) that fails the build on a routing regression. This is the
+  green check above.
+- **Quality (committed snapshot).** Real model calls are too costly/noisy for CI and the
+  fusion panel needs a permission-bypassed headless agent, so the quality claim is
+  published as a human-generated snapshot on a real objective dataset (not the
+  plumbing-only `sample.jsonl`), with the McNemar / CI / token-ratio summary committed
+  alongside it.
 
 ## Limits
 
