@@ -22,11 +22,15 @@ run, not the raw dataset.
   python3 eval/quality/datasets/build_humaneval.py --selftest # no network
 """
 import argparse
+import ast
 import doctest
 import json
+import os
 import random
 import re
+import subprocess
 import sys
+import tempfile
 import textwrap
 from pathlib import Path
 
@@ -37,33 +41,85 @@ TASK_TMPL = (
 )
 
 
-def visible_examples(prompt, entry_point):
-    """Best-effort: turn the docstring's >>> doctests into a `check(candidate)` of
-    VISIBLE asserts. Returns the check string, or None if nothing usable parsed."""
-    # Parse the docstring body (dedented) rather than the whole function source --
-    # feeding code at column 0 to doctest trips its inconsistent-whitespace check.
+def _valid_expr(s):
+    try:
+        ast.parse(s, mode="eval")
+        return True
+    except (SyntaxError, ValueError):
+        return False
+
+
+def _example_pairs(prompt, entry_point):
+    """Extract (call, expected) example pairs from a docstring. Handles `>>>`
+    doctests and HumanEval's inline `f(x) ==> y` / `=> ` / `-> ` / `→` style. Each
+    side must parse as a Python expression (a malformed one would break the check)."""
     m = re.search(r'(?:"""|\'\'\')(.*?)(?:"""|\'\'\')', prompt, re.DOTALL)
     doc = textwrap.dedent(m.group(1)) if m else prompt
-    try:
-        exs = doctest.DocTestParser().get_examples(doc)
+    pairs = []
+
+    try:  # 1) `>>>` doctests.
+        for ex in doctest.DocTestParser().get_examples(doc):
+            src, want = ex.source.strip(), ex.want.strip()
+            if want and "\n" not in want and "Traceback" not in want:
+                call = re.sub(rf"\b{re.escape(entry_point)}\s*\(", "candidate(", src)
+                pairs.append((call, want))
     except Exception:
+        pass
+
+    for line in doc.splitlines():  # 2) inline arrows (check ==> before =>).
+        s = line.strip()
+        for sep in ("==>", "=>", "->", "→"):
+            if sep in s:
+                lhs, _, rhs = s.partition(sep)
+                cm = re.search(rf"\b{re.escape(entry_point)}\s*\((.*)\)\s*$", lhs.strip())
+                rhs = rhs.strip().rstrip(".")
+                if cm and rhs:
+                    pairs.append((f"candidate({cm.group(1)})", rhs))
+                break
+
+    seen, out = set(), []
+    for call, want in pairs:
+        if ("candidate(" in call and _valid_expr(call) and _valid_expr(want)
+                and (call, want) not in seen):
+            seen.add((call, want))
+            out.append((call, want))
+    return out
+
+
+def _canonical_satisfies(canonical, entry_point, call, want):
+    """Run the reference solution against one example assert. Drops loose/rounded
+    docstring examples (e.g. truncated floats) that a CORRECT solution fails, so
+    self-consistency selection never rejects a right answer on a bad example."""
+    prog = f"{canonical}\ncandidate = {entry_point}\nassert ({call}) == ({want})\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+        f.write(prog)
+        path = f.name
+    try:
+        return subprocess.run([sys.executable, path], capture_output=True,
+                              timeout=8).returncode == 0
+    except Exception:
+        return False
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def visible_examples(prompt, entry_point, canonical):
+    """A `check(candidate)` of VISIBLE example asserts the reference solution
+    satisfies. Returns the check string, or None if nothing usable survives."""
+    kept = [(c, w) for c, w in _example_pairs(prompt, entry_point)
+            if _canonical_satisfies(canonical, entry_point, c, w)]
+    if not kept:
         return None
-    lines = []
-    for ex in exs:
-        src, want = ex.source.strip(), ex.want.strip()
-        if not want or "\n" in want or "Traceback" in want:
-            continue
-        call = re.sub(rf"\b{re.escape(entry_point)}\s*\(", "candidate(", src)
-        if "candidate(" not in call:
-            continue
-        lines.append(f"    assert ({call}) == ({want})")
-    if not lines:
-        return None
-    return "def check(candidate):\n" + "\n".join(lines)
+    return "def check(candidate):\n" + "\n".join(
+        f"    assert ({c}) == ({w})" for c, w in kept)
 
 
 def to_record(row):
     ep = row["entry_point"]
+    canonical = row["prompt"] + row["canonical_solution"]
     return {
         "id": row["task_id"],
         "type": "code",
@@ -71,8 +127,8 @@ def to_record(row):
         "answer": {
             "entry_point": ep,
             "tests": row["test"],
-            "examples": visible_examples(row["prompt"], ep),
-            "canonical": row["prompt"] + row["canonical_solution"],
+            "examples": visible_examples(row["prompt"], ep, canonical),
+            "canonical": canonical,
         },
     }
 

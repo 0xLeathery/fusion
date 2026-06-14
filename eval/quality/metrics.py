@@ -74,6 +74,24 @@ def _per_task_correct(records):
     return out
 
 
+def _means_by_cond(records, field):
+    d = defaultdict(list)
+    for r in records:
+        v = r.get(field)
+        if isinstance(v, (int, float)):
+            d[r["condition"]].append(v)
+    return {c: sum(v) / len(v) for c, v in d.items() if v}
+
+
+def _budget_means(records):
+    """(axis, mean-per-condition) for budget-matching. Prefer $ cost -- it already
+    includes fusion's subagents and prices cache correctly; fall back to tokens."""
+    cost = _means_by_cond(records, "cost_usd")
+    if cost:
+        return "$", cost
+    return "tok", _means_by_cond(records, "total_tokens")
+
+
 def summarise(records):
     conds = sorted({r["condition"] for r in records})
 
@@ -90,26 +108,25 @@ def summarise(records):
         lo, hi = bootstrap_ci(v)
         print(f"  {c:<16} acc={sum(v)/len(v):.3f}  [{lo:.3f},{hi:.3f}]  n={len(v)}")
 
-    print("\nCost (mean tokens/query, ratio vs single):")
-    tok = defaultdict(list)
-    for r in records:
-        t = r.get("total_tokens")
-        if t is not None:
-            tok[r["condition"]].append(t)
-    base = (sum(tok["single"]) / len(tok["single"])) if tok.get("single") else None
+    tok = _means_by_cond(records, "total_tokens")
+    cost = _means_by_cond(records, "cost_usd")
+    base_tok, base_cost = tok.get("single"), cost.get("single")
+    print("\nCost (mean per query, ratio vs single):")
     for c in conds:
-        v = tok.get(c, [])
-        if not v:
-            print(f"  {c:<16} (no token data)")
-            continue
-        mean = sum(v) / len(v)
-        ratio = f"{mean/base:.2f}x" if base else "n/a"
-        print(f"  {c:<16} mean={mean:,.0f}  ratio={ratio}")
+        parts = []
+        if c in tok:
+            ratio = f" ({tok[c] / base_tok:.2f}x)" if base_tok else ""
+            parts.append(f"{tok[c]:>9,.0f} tok{ratio}")
+        if c in cost:
+            ratio = f" ({cost[c] / base_cost:.2f}x)" if base_cost else ""
+            parts.append(f"${cost[c]:.4f}{ratio}")
+        print(f"  {c:<16} " + ("  ".join(parts) if parts else "(no cost data)"))
 
     # The headline test: each fusion:N vs the SELF-CONSISTENCY condition closest
-    # to it in measured token budget. Pairing on N would be dishonest -- fusion:N
-    # costs (N+1)x but selfconsist:N only costs Nx -- so we match on actual spend.
-    mean_tok = {c: (sum(v) / len(v)) for c, v in tok.items() if v}
+    # to it in measured budget. Pairing on N would be dishonest -- fusion:N costs
+    # (N+1)x but selfconsist:N only costs Nx -- so we match on actual spend, by $
+    # cost when recorded (it captures subagents + cache) else tokens.
+    axis, mean_budget = _budget_means(records)
     per_task = _per_task_correct(records)
     sc_conds = [c for c in conds if c.startswith("selfconsist")]
     print("\nHonest-baseline comparison (fusion vs budget-matched self-consistency):")
@@ -117,15 +134,15 @@ def summarise(records):
     for c in conds:
         if not c.startswith("fusion:"):
             continue
-        cands = [s for s in sc_conds if s in mean_tok and c in mean_tok]
+        cands = [s for s in sc_conds if s in mean_budget and c in mean_budget]
         if not cands:
-            print(f"  {c}: no self-consistency baseline with token data to match")
+            print(f"  {c}: no self-consistency baseline with budget data to match")
             continue
-        base_cond = min(cands, key=lambda s: abs(mean_tok[s] - mean_tok[c]))
+        base_cond = min(cands, key=lambda s: abs(mean_budget[s] - mean_budget[c]))
         budget_note = ""
-        if mean_tok.get(c):
-            r = mean_tok[base_cond] / mean_tok[c]
-            budget_note = f", budget {r:.2f}x of fusion" + (
+        if mean_budget.get(c):
+            r = mean_budget[base_cond] / mean_budget[c]
+            budget_note = f", budget {r:.2f}x of fusion (by {axis})" + (
                 "" if 0.85 <= r <= 1.15 else "  [NOT well budget-matched]")
         tasks = sorted(set(per_task.get(c, {})) & set(per_task.get(base_cond, {})))
         a = [per_task[c][t] for t in tasks]
@@ -150,12 +167,7 @@ def headline(records, label=None):
 
     Pass --label to embed the dataset/model/date metadata that makes the claim
     reproducible (the records themselves don't carry it)."""
-    tok = defaultdict(list)
-    for r in records:
-        t = r.get("total_tokens")
-        if t is not None:
-            tok[r["condition"]].append(t)
-    mean_tok = {c: sum(v) / len(v) for c, v in tok.items() if v}
+    axis, mean_budget = _budget_means(records)
     per_task = _per_task_correct(records)
     conds = sorted({r["condition"] for r in records})
     sc = [c for c in conds if c.startswith("selfconsist")]
@@ -167,17 +179,17 @@ def headline(records, label=None):
         return
     for c in fusions:
         budget = None
-        cands = [s for s in sc if s in mean_tok and c in mean_tok]
+        cands = [s for s in sc if s in mean_budget and c in mean_budget]
         if cands:
-            base = min(cands, key=lambda s: abs(mean_tok[s] - mean_tok[c]))
-            budget = mean_tok[base] / mean_tok[c]
+            base = min(cands, key=lambda s: abs(mean_budget[s] - mean_budget[c]))
+            budget = mean_budget[base] / mean_budget[c]
         else:
             cands = [s for s in sc
                      if set(per_task.get(s, {})) & set(per_task.get(c, {}))]
             if not cands:
                 print(f"{c}: no self-consistency baseline to compare — no claim")
                 continue
-            base = cands[0]  # no token data to budget-match; flagged below
+            base = cands[0]  # no budget data to match; flagged below
 
         tasks = sorted(set(per_task.get(c, {})) & set(per_task.get(base, {})))
         if not tasks:
@@ -189,18 +201,21 @@ def headline(records, label=None):
         lo, hi = bootstrap_paired_diff_ci(a, b)
         _, _, p = mcnemar_exact([bool(x) for x in a], [bool(x) for x in b])
 
-        if lo > 0:
-            verdict = "fusion beats the budget-matched baseline (95% CI excludes 0)"
-        elif hi < 0:
-            verdict = "fusion is WORSE than the baseline (95% CI excludes 0)"
+        # Gate the verdict on McNemar (the proper paired test) -- the bootstrap CI
+        # is anti-conservative at tiny discordant counts and can exclude 0 while
+        # McNemar is non-significant. The CI is reported as the effect size.
+        if p < 0.05 and delta > 0:
+            verdict = "fusion beats the budget-matched baseline (McNemar p<0.05)"
+        elif p < 0.05 and delta < 0:
+            verdict = "fusion is WORSE than the baseline (McNemar p<0.05)"
         else:
-            verdict = "no significant difference (95% CI includes 0)"
+            verdict = "no significant difference (McNemar p>=0.05)"
         if budget is None:
-            budget_str = ", budget UNMATCHED (no token data)"
+            budget_str = ", budget UNMATCHED (no cost/token data)"
         elif 0.85 <= budget <= 1.15:
-            budget_str = f", budget {budget:.2f}x"
+            budget_str = f", budget {budget:.2f}x (by {axis})"
         else:
-            budget_str = f", budget {budget:.2f}x [NOT well-matched]"
+            budget_str = f", budget {budget:.2f}x (by {axis}) [NOT well-matched]"
 
         print(
             f"CLAIM ({c} vs {base}): {fa*100:.1f}% vs {fb*100:.1f}% = "
