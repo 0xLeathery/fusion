@@ -22,6 +22,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -52,6 +53,9 @@ def grade(gtype, gold, text):
         return m.group(1) == str(gold).upper()
     if gtype == "exact":
         return text.strip().lower() == str(gold).strip().lower()
+    if gtype == "code":
+        # gold is a spec dict: {entry_point, tests, [examples], [canonical]}.
+        return run_code_tests(extract_code(text), gold)
     raise ValueError(f"unknown grader type: {gtype}")
 
 
@@ -68,6 +72,90 @@ def extract_answer(gtype, text):
     return text.strip().lower()
 
 
+# ---- code execution (for type: "code") -------------------------------------
+#
+# SECURITY: grading code tasks EXECUTES model-generated Python in a subprocess.
+# Run only datasets and model outputs you trust. Execution is isolated to a
+# subprocess with a wall-clock timeout, but this is NOT a security sandbox (no
+# syscall / network / filesystem confinement). HumanEval-style harnesses carry
+# the same caveat.
+
+_CODE_EXEC_WARNED = False
+
+
+def _warn_code_exec():
+    global _CODE_EXEC_WARNED
+    if not _CODE_EXEC_WARNED:
+        print("  ! code grading executes model-generated Python in a subprocess "
+              "(timeout-guarded, NOT sandboxed)", file=sys.stderr)
+        _CODE_EXEC_WARNED = True
+
+
+def extract_code(text):
+    """Pull a Python solution from a model reply: prefer the largest fenced
+    block, else the raw text."""
+    if not text:
+        return None
+    blocks = re.findall(r"```(?:python|py)?\s*\n(.*?)```", text, re.DOTALL)
+    if blocks:
+        return max(blocks, key=len).strip()
+    return text.strip() or None
+
+
+def _exec_program(program, timeout):
+    """Run a self-contained Python program in a subprocess. True iff it exits 0."""
+    _warn_code_exec()
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as f:
+        f.write(program)
+        path = f.name
+    try:
+        proc = subprocess.run([sys.executable, path], capture_output=True,
+                              text=True, timeout=timeout,
+                              env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        return proc.returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+    except Exception:
+        return False
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _check_program(solution, check_src, entry_point):
+    """A solution + a `def check(candidate)` block + the call that runs it."""
+    return f"{solution}\n\n{check_src}\n\ncheck({entry_point})\n"
+
+
+def run_code_tests(solution, spec, timeout=15):
+    """Grade a code solution against its HIDDEN test `check`. None if no code."""
+    if not solution:
+        return None
+    return _exec_program(
+        _check_program(solution, spec.get("tests", ""), spec.get("entry_point", "")),
+        timeout)
+
+
+def select_best_code(candidates, spec):
+    """Honest self-consistency for code: return the first candidate that passes
+    the VISIBLE example tests (never the hidden ones). No examples, or none pass
+    -> first candidate. With no visible oracle you genuinely can't do better, so
+    this neither cheats toward nor against fusion."""
+    cands = [c for c in candidates if c]
+    if not cands:
+        return None
+    examples = spec.get("examples")
+    if not examples:
+        return cands[0]
+    ep = spec.get("entry_point", "")
+    for c in cands:
+        if _exec_program(_check_program(c, examples, ep), timeout=10):
+            return c
+    return cands[0]
+
+
 # ---- invocation ------------------------------------------------------------
 
 def invoke_claude(prompt, model, fusion_mode, dry_run, sim):
@@ -78,6 +166,14 @@ def invoke_claude(prompt, model, fusion_mode, dry_run, sim):
         gtype, gold, p_correct, tokens = sim
         rng = random.Random(hash((prompt, fusion_mode, random.random())) & 0xFFFFFFFF)
         correct = rng.random() < p_correct
+        if gtype == "code":
+            # Emit the reference solution (passes) or a stub (fails) and let the
+            # real executable grader run it -- so --dry-run actually exercises the
+            # code grader end-to-end, at zero API cost.
+            ep = gold.get("entry_point", "f")
+            sol = gold.get("canonical", "") if correct else (
+                f"def {ep}(*args, **kwargs):\n    raise Exception('stub')")
+            return f"```python\n{sol}\n```", tokens, None
         if correct:
             ans = str(gold)
         elif gtype == "mcq":
@@ -130,7 +226,20 @@ def run_condition(cond, task, model, dry_run, sim):
         return text, tok
 
     if name == "selfconsist":
-        # The honest baseline: N independent samples, majority vote, summed cost.
+        # The honest baseline: N independent samples, aggregated, summed cost.
+        if task["type"] == "code":
+            # Can't majority-vote source strings (every sample differs). Select
+            # by visible example tests only -- the honest, deployable aggregator.
+            cands, total = [], 0
+            for _ in range(n):
+                text, tok, _ = invoke_claude(task["task"], model, "off", dry_run, sim)
+                total += tok or 0
+                code = extract_code(text)
+                if code:
+                    cands.append(code)
+            if not cands:
+                return None, total or None
+            return select_best_code(cands, task["answer"]), (total or None)
         answers, total = [], 0
         for _ in range(n):
             text, tok, _ = invoke_claude(task["task"], model, "off", dry_run, sim)

@@ -45,6 +45,34 @@ Fill from `python3 eval/quality/metrics.py <snapshot>.jsonl` (full summariser).
 - **Significance, not vibes.** A few-point delta on a small dataset is usually noise;
   the claim only stands if the 95% CI excludes zero.
 
+## Code track (HumanEval) — the least-circular signal
+
+The first measured dataset is **HumanEval** (164 self-contained Python problems,
+MIT). Each solution is graded by *executing* it against hidden unit tests —
+pass/fail, no model judging itself, which is why it's the least circular signal
+available.
+
+Build it (needs `pip install datasets`; the output is gitignored):
+
+```bash
+python3 eval/quality/datasets/build_humaneval.py --out eval/quality/datasets/humaneval.jsonl
+# or a seeded sample:  --n 40
+```
+
+Then run the sweep with `--dataset eval/quality/datasets/humaneval.jsonl`; the
+`type:"code"` records grade by execution.
+
+- **Self-consistency stays honest for code.** Source strings can't be
+  majority-voted (every sample differs in whitespace), so `selfconsist:N` selects
+  the first candidate that passes the **visible** docstring examples — never the
+  hidden tests. Problems with no parseable examples fall back to first-sample (the
+  builder reports how many).
+- **⚠ Security.** Grading `type:"code"` **executes model-generated Python** in a
+  timeout-guarded subprocess — isolated, but not a security sandbox. Run only
+  datasets and outputs you trust. The committed
+  `eval/quality/datasets/code_sample.jsonl` is a tiny self-authored fixture CI uses
+  to smoke-test the grader safely.
+
 ## How this is generated (reproducible)
 
 1. **Dataset** — a real, objective set at `eval/quality/datasets/<name>.jsonl`
